@@ -1,0 +1,17 @@
+# Node dependencies
+node_modules/
+.next/
+dist/
+
+# Local databases
+backend/data/
+
+# Environment keys
+.env
+.env.local
+.env.production
+backend/.env
+
+# Logs and system files
+.DS_Store
+*.log

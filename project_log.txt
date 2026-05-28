@@ -1,0 +1,75 @@
+[2026-05-28T06:30:00Z] INITIALIZATION
+- Checked system requirements and rules.md / architecture.md.
+- Created implementation_plan.md artifact with zero-docker SQLite + in-memory cache design.
+- Created task.md progress checklist artifact.
+- Initialized Next.js frontend project generation.
+
+[2026-05-28T06:34:00Z] PHASE 1 COMPLETED
+- Initialized Next.js frontend project in `frontend/`.
+- Configured Fastify backend in `backend/` with TypeScript.
+- Created `.env` and `.env.example` configurations.
+- Swapped SQLite native compilation dependency for a pure JS JSON file database (`backend/src/database/db.ts`) due to Node v24 Windows compatibility.
+- Implemented and executed Phase-1 tests in `backend/src/tests/phase1.test.ts`. All 4 tests passed successfully.
+
+[2026-05-28T06:45:00Z] PHASE 2 COMPLETED
+- Installed frontend dependencies (Zustand, Lucide, React Query, Framer Motion, React Markdown, Recharts, Vitest).
+- Implemented the custom Zustand state store (`frontend/src/store/useStore.ts`) to manage chat sessions, models, and evaluation states.
+- Created `frontend/src/mockData.ts` with rich simulation reports (factual claim contradictions, implicit assumptions, logic errors, and certainty profiles).
+- Built the interactive text highlighting parser (`frontend/src/components/Highlighting.tsx`) and expandable side evaluation panel (`frontend/src/components/Sidebar.tsx`).
+- Created the main chat landing interface (`frontend/src/app/page.tsx`) with model routing controls and tooltip inspector overlays.
+- Created and executed the Phase 2 unit test suite (`frontend/src/tests/store.test.ts`). All 5 tests passed successfully.
+
+[2026-05-28T06:48:00Z] PHASE 3 COMPLETED
+- Installed official `@google/genai` client SDK for Google Gemini 2.0+ support.
+- Built the backend model router (`backend/src/engines/modelRouter.ts`) to handle LLM generations for Gemini (`gemini-2.5-flash`) and Groq (`llama-3.3-70b-versatile`) with API key validation.
+- Implemented Fastify HTTP routes in `backend/src/server.ts` for loading sessions (`GET /api/session/:id`), clearing histories (`POST /api/session/clear`), and AI response generation (`POST /api/chat`).
+- Written and executed Phase 3 integration and mock LLM tests (`backend/src/tests/phase3.test.ts`). All 7 backend tests across Phase 1 and Phase 3 passed successfully.
+
+[2026-05-28T06:50:00Z] PHASE 4 COMPLETED
+- Implemented character-by-character sentence parsing algorithm in `backend/src/engines/segmenter.ts` to cleanly isolate verifiable claims while ignoring decimals (e.g. 12.5) and abbreviations (e.g. e.g., i.e.).
+- Built the Evaluation Framework Layer (`backend/src/engines/evaluators.ts`) containing Zod schema validation structures for Trust, Assumptions, Hallucinations, Logic, Calibration, and Bias.
+- Wrote and executed Phase 4 unit and integration tests (`backend/src/tests/phase4.test.ts`) validating claim parsing boundaries, character index alignment, and schema compliance. All 11 backend tests across Phase 1, Phase 3, and Phase 4 passed successfully.
+
+[2026-05-28T06:53:00Z] PHASE 5 COMPLETED
+- Configured real Google Gemini 2.0+ API client integration inside `backend/src/engines/evaluators.ts` utilizing `gemini-2.5-flash`, JSON mode constraints, and low temperature settings.
+- Wrote unified expert AI Output Judge prompt to evaluate Overall Reliability, Assumptions, Hallucinations, Logic, Calibration, and Bias in a single efficient model call.
+- Implemented robust fallback logic that triggers mock reports and logs warnings when `GEMINI_API_KEY` is not configured, ensuring offline testing and graceful error recovery.
+- Connected the evaluation engine into the main `/api/chat` route.
+- Wrote and executed Phase 5 tests in `backend/src/tests/phase5.test.ts` verifying parsing, database logging, and routing. All 13 tests passed successfully.
+
+[2026-05-28T06:55:00Z] PHASE 6 COMPLETED
+- Implemented caching layer in `backend/src/engines/cache.ts` using SHA-256 hash keys generated via the prompt and AI response text, complete with 1-hour TTL expiration.
+- Hooked the cache checker into the `/api/chat` route in `backend/src/server.ts` to fetch cached reports, skipping LLM evaluation cycles for repetitive queries.
+- Built a deterministic scoring aggregator (`aggregateScores`) inside `backend/src/engines/evaluators.ts` that enforces rigid safety overrides (e.g. downgrading reliability to LOW and capping trust scores below 45 if factual contradictions are present).
+- Written and executed Phase 6 unit tests (`backend/src/tests/phase6.test.ts`) validating hashing, cache hits/misses, and safety aggregator boundaries. All 18 tests across the project run successfully.
+
+[2026-05-28T06:57:00Z] PHASE 7 COMPLETED
+- Configured TanStack React Query client context inside the Next.js App Router (`frontend/src/components/Providers.tsx`) and wrapped it in `frontend/src/app/layout.tsx`.
+- Refined the main conversational interface (`frontend/src/app/page.tsx`) to pull initial session history (`GET /api/session/:id`), trigger model routing completions (`POST /api/chat`), and clear histories (`POST /api/session/clear`) using active API fetch calls.
+- Connected the active evaluation sidebar trigger and orange-dashed text highlight actions to backend-generated metrics.
+- Executed the Phase 7 frontend unit tests (`frontend/src/tests/store.test.ts`) and all 18 backend test suites. All tests passed successfully.
+
+[2026-05-28T07:00:00Z] PHASE 8 COMPLETED
+- Polished the frontend layout by defining global custom HSL variables, scrollbar styling, and smooth `@keyframes` fade-in slide transitions inside `frontend/src/app/globals.css`.
+- Fixed ESM compiler errors by setting `"type": "module"` inside `backend/package.json` to allow native ECMAScript imports, top-level `await`, and `import.meta` boundaries.
+- Executed production builds for both frontend (`npm run build` using Next.js Turbopack) and backend (`tsc`). Both compiled with zero errors.
+- Executed the entire unit/integration test suites (23 tests total: 5 in frontend, 18 in backend). All 23 tests passed successfully.
+- Generated `walkthrough.md` report detailing changes, test files, and run instructions.
+- Completed all MVP requirements for the AI Output Trust & Reliability Platform.
+
+[2026-05-28T09:30:00Z] ADAPTIVE ENHANCEMENTS
+- Added Simulated Reasoning Flow (Chain of Thought) reconstruction inside backend evaluators and frontend sidebar display.
+- Enhanced the highlight system in `Highlighting.tsx` to support multi-colored Attention Highlights (Factual contradictions in Red, Logic errors in Indigo, high-risk Assumptions in Amber).
+- Linked assumptions and logic flaws to specific claim segments, enabling inline hover inspection.
+
+[2026-05-28T09:38:00Z] GOOGLE GEMINI & MATERIAL 3 REDESIGN
+- Swapped default Geist font family for Google Outfit Font in `layout.tsx` and `globals.css` to enable rounded geometry typography.
+- Re-themed Tailwind variables to use official Google Gemini dark mode colors (`#131314` body bg, `#1e1f20` sidebar bg, `#2c2e30` borders, `#8ab4f8` / `#d7aef8` accent colors).
+- Implemented collapsible Left Navigation Drawer in `page.tsx` displaying interactive recent chat history list.
+- Configured a new GET `/api/sessions` API metadata route in the Fastify backend to retrieve active database session logs dynamically.
+- Relocated model selector into a clean rounded Material popover button in the navbar.
+- Redesigned greeting dashboard with gradient typography and quick-trigger starter action cards.
+- Redesigned message list to remove boxy frames, using borderless spacing and Google profile initials avatars.
+- Repackaged composer input bar into a fully-rounded input capsule.
+- Updated Right Evaluation Sidebar to match the color palette, Material tabs, and radial gauge meters.
+- Verified frontend compilation and test suites with 100% test passage.
