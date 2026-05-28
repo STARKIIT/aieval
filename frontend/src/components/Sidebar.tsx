@@ -12,11 +12,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ evaluation, onClose }) => {
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: ShieldCheck },
-    { id: 'reasoning', label: 'Reasoning Flow', icon: Brain },
+    { id: 'reasoning', label: 'Reasoning', icon: Brain },
     { id: 'assumptions', label: 'Assumptions', icon: HelpCircle },
-    { id: 'hallucinations', label: 'Hallucinations', icon: ShieldAlert },
+    { id: 'hallucinations', label: 'Factual', icon: ShieldAlert },
     { id: 'logic', label: 'Logic', icon: Activity },
-    { id: 'calibration', label: 'Calibration', icon: Compass },
+    { id: 'calibration', label: 'Certainty', icon: Compass },
     { id: 'bias', label: 'Bias', icon: Scale },
   ];
 
@@ -75,7 +75,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ evaluation, onClose }) => {
       </div>
 
       {/* Material Tabs */}
-      <div className="flex border-b border-[#2c2e30]/60 overflow-x-auto scrollbar-none shrink-0 bg-[#1e1f20]">
+      <div className="flex border-b border-[#2c2e30]/60 overflow-x-auto shrink-0 bg-[#1e1f20] scrollbar-thin">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -83,13 +83,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ evaluation, onClose }) => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-4.5 py-3.5 text-xs font-semibold border-b-2 transition-all duration-150 whitespace-nowrap cursor-pointer ${
+              className={`flex items-center gap-1 px-3 py-3 text-[11px] font-semibold border-b-2 transition-all duration-150 whitespace-nowrap cursor-pointer ${
                 isActive
                   ? 'border-[#8ab4f8] text-[#8ab4f8] bg-[#8ab4f8]/5'
                   : 'border-transparent text-[#c4c7c5] hover:text-[#e3e3e3] hover:bg-[#2d2f31]/40'
               }`}
             >
-              <Icon className="h-3.5 w-3.5" />
+              <Icon className="h-3 w-3" />
               {tab.label}
             </button>
           );
