@@ -63,28 +63,54 @@ async function queryGroq(prompt: string, history: Message[]): Promise<string> {
 export async function generateResponse(
   model: 'gemini' | 'groq',
   prompt: string,
-  history: Message[]
+  history: Message[],
+  refinement?: {
+    originalResponse: string;
+    adjustments: { type: string; original: string; modification: string }[];
+    customFeedback?: string;
+  }
 ): Promise<string> {
+  let finalPrompt = prompt;
+  if (refinement) {
+    const adjustmentsText = refinement.adjustments
+      .map(adj => `- [${adj.type.toUpperCase()}] "${adj.original}" -> Modify to: "${adj.modification}"`)
+      .join('\n');
+    
+    finalPrompt = `You are an expert AI writer. The user wants you to refine your previous response to address specific audit findings and modified assumptions.
+
+Original Prompt:
+"${prompt}"
+
+Previous Response:
+"${refinement.originalResponse}"
+
+Corrections & Modified Assumptions:
+${adjustmentsText}
+${refinement.customFeedback ? `\nAdditional Feedback:\n"${refinement.customFeedback}"` : ''}
+
+Generate a revised response addressing the corrections. Output only the revised response content without explanations, JSON, or meta-comments.`;
+  }
+
   if (model === 'groq') {
-    return await queryGroq(prompt, history);
+    return await queryGroq(finalPrompt, history);
   }
 
   // Default to Gemini
   const ai = getGeminiClient();
   
   // Format history for Gemini
-  // Gemini expects: contents: [{ role: 'user'|'model', parts: [{ text: '...' }] }]
   const contents = [
     ...history.map(msg => ({
       role: msg.sender === 'user' ? 'user' : 'model',
       parts: [{ text: msg.content }]
     })),
-    { role: 'user', parts: [{ text: prompt }] }
+    { role: 'user', parts: [{ text: finalPrompt }] }
   ];
 
+  const geminiModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: geminiModel,
       contents,
       config: {
         temperature: 0.7

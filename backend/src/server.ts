@@ -112,21 +112,51 @@ server.post('/api/chat', async (request, reply) => {
   const chatBodySchema = z.object({
     sessionId: z.string().min(1),
     model: z.enum(['gemini', 'groq']),
-    prompt: z.string().min(1)
+    prompt: z.string().min(1),
+    refinement: z.object({
+      messageId: z.string().min(1),
+      adjustments: z.array(z.object({
+        type: z.string(),
+        original: z.string(),
+        modification: z.string()
+      })),
+      customFeedback: z.string().optional()
+    }).optional()
   });
 
   try {
-    const { sessionId, model, prompt } = chatBodySchema.parse(request.body);
+    const { sessionId, model, prompt, refinement } = chatBodySchema.parse(request.body);
     
     // 1. Get existing session messages (for history context)
     const session = await getSession(sessionId) || await createSession(sessionId);
     const history = session.messages;
 
-    // 2. Save user's prompt message
-    const userMsg = await addMessage(sessionId, 'user', prompt);
+    // 2. Save user's prompt message (use custom feedback summary if refining)
+    const displayPrompt = refinement 
+      ? (refinement.customFeedback || 'Refined previous response based on audit findings') 
+      : prompt;
+    const userMsg = await addMessage(sessionId, 'user', displayPrompt);
 
-    // 3. Generate response using Model Router
-    const aiResponseContent = await generateResponse(model, prompt, history);
+    // 3. Retrieve original AI response content if refining
+    let originalResponse = '';
+    if (refinement) {
+      const originalMsg = history.find(m => m.id === refinement.messageId);
+      if (originalMsg) {
+        originalResponse = originalMsg.content;
+      }
+    }
+
+    // 4. Generate response using Model Router (passing refinement context if present)
+    const aiResponseContent = await generateResponse(
+      model, 
+      prompt, 
+      history,
+      refinement ? {
+        originalResponse,
+        adjustments: refinement.adjustments,
+        customFeedback: refinement.customFeedback
+      } : undefined
+    );
 
     // 4. Save AI's response message (initially without evaluation)
     const aiMsg = await addMessage(sessionId, 'ai', aiResponseContent);

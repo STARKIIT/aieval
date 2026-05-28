@@ -31,7 +31,7 @@ export const AssumptionSchema = z.object({
   statement: z.string(),
   risk: z.enum(['LOW', 'MEDIUM', 'HIGH']),
   reason: z.string(),
-  claim: z.string().optional() // The exact sentence segment where it occurs
+  claim: z.string().nullable().optional() // The exact sentence segment where it occurs
 });
 export const AssumptionsReportSchema = z.object({
   assumptions: z.array(AssumptionSchema)
@@ -53,7 +53,7 @@ export const LogicFlawSchema = z.object({
   flaw: z.string(),
   severity: z.enum(['LOW', 'MEDIUM', 'HIGH']),
   explanation: z.string(),
-  claim: z.string().optional() // The exact sentence segment where it occurs
+  claim: z.string().nullable().optional() // The exact sentence segment where it occurs
 });
 export const LogicReportSchema = z.object({
   logicScore: z.number().min(0).max(100),
@@ -245,9 +245,10 @@ Return a JSON object conforming exactly to this schema:
 }
 `;
 
+  const evalModel = process.env.GEMINI_EVAL_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: evalModel,
       contents: auditorPrompt,
       config: {
         responseMimeType: 'application/json',
@@ -345,7 +346,7 @@ function getMockReport(responseContent: string, segments: TextSegment[]): Evalua
     ],
     calibration: [
       {
-        claim: 'We will achieve 100% operational profitability within exactly three months.',
+        claim: 'We will achieve 100% operational profitability within exactly three months of launch.',
         certainty: 95,
         evidenceStrength: 'WEAK',
         status: 'OVERCONFIDENT'
