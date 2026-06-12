@@ -54,6 +54,11 @@ export interface EvaluationReport {
     evidence: string;
     severity: 'LOW' | 'MEDIUM' | 'HIGH';
   }[];
+  lowLogprobs?: {
+    claim: string;
+    logprob: number;
+    reason: string;
+  }[];
 }
 
 interface WorkspaceState {
@@ -65,6 +70,7 @@ interface WorkspaceState {
   selectedModel: 'gemini' | 'groq';
   isGenerating: boolean;
   isEvaluating: boolean;
+  user: any | null;
   
   // Actions
   setSessionId: (id: string) => void;
@@ -77,6 +83,7 @@ interface WorkspaceState {
   setSelectedModel: (model: 'gemini' | 'groq') => void;
   setGenerating: (isGenerating: boolean) => void;
   setEvaluating: (isEvaluating: boolean) => void;
+  setUser: (user: any | null) => void;
   clearWorkspace: () => void;
 }
 
@@ -89,6 +96,7 @@ export const useStore = create<WorkspaceState>((set) => ({
   selectedModel: 'gemini',
   isGenerating: false,
   isEvaluating: false,
+  user: null,
 
   setSessionId: (sessionId) => set({ sessionId }),
   setMessages: (messages) => set({ messages }),
@@ -106,5 +114,6 @@ export const useStore = create<WorkspaceState>((set) => ({
   setSelectedModel: (selectedModel) => set({ selectedModel }),
   setGenerating: (isGenerating) => set({ isGenerating }),
   setEvaluating: (isEvaluating) => set({ isEvaluating }),
+  setUser: (user) => set({ user }),
   clearWorkspace: () => set({ messages: [], activeMessageId: null, isSidebarOpen: false })
 }));

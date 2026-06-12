@@ -47,9 +47,10 @@ server.get('/api/session/:sessionId', async (request, reply) => {
 
   try {
     const { sessionId } = paramsSchema.parse(request.params);
-    let session = await getSession(sessionId);
+    const userId = request.headers['x-user-id'] as string | undefined;
+    let session = await getSession(sessionId, userId);
     if (!session) {
-      session = await createSession(sessionId);
+      session = await createSession(sessionId, userId);
     }
     return session;
   } catch (error) {
@@ -70,7 +71,8 @@ server.post('/api/session/clear', async (request, reply) => {
 
   try {
     const { sessionId } = bodySchema.parse(request.body);
-    const cleared = await clearSession(sessionId);
+    const userId = request.headers['x-user-id'] as string | undefined;
+    const cleared = await clearSession(sessionId, userId);
     return { success: cleared };
   } catch (error) {
     server.log.error(error);
@@ -85,10 +87,11 @@ server.post('/api/session/clear', async (request, reply) => {
 // List sessions metadata route
 server.get('/api/sessions', async (request, reply) => {
   try {
-    const sessionIds = await listSessions();
+    const userId = request.headers['x-user-id'] as string | undefined;
+    const sessionIds = await listSessions(userId);
     const sessionsList = [];
     for (const id of sessionIds) {
-      const sess = await getSession(id);
+      const sess = await getSession(id, userId);
       if (sess) {
         const firstUserMsg = sess.messages.find(m => m.sender === 'user')?.content || 'New Chat';
         sessionsList.push({
@@ -121,21 +124,26 @@ server.post('/api/chat', async (request, reply) => {
         modification: z.string()
       })),
       customFeedback: z.string().optional()
+    }).optional(),
+    generationSettings: z.object({
+      tone: z.enum(['empathetic', 'neutral', 'raw']),
+      multiplePaths: z.boolean()
     }).optional()
   });
 
   try {
-    const { sessionId, model, prompt, refinement } = chatBodySchema.parse(request.body);
+    const { sessionId, model, prompt, refinement, generationSettings } = chatBodySchema.parse(request.body);
+    const userId = request.headers['x-user-id'] as string | undefined;
     
     // 1. Get existing session messages (for history context)
-    const session = await getSession(sessionId) || await createSession(sessionId);
+    const session = await getSession(sessionId, userId) || await createSession(sessionId, userId);
     const history = session.messages;
 
     // 2. Save user's prompt message (use custom feedback summary if refining)
     const displayPrompt = refinement 
       ? (refinement.customFeedback || 'Refined previous response based on audit findings') 
       : prompt;
-    const userMsg = await addMessage(sessionId, 'user', displayPrompt);
+    const userMsg = await addMessage(sessionId, 'user', displayPrompt, userId);
 
     // 3. Retrieve original AI response content if refining
     let originalResponse = '';
@@ -155,11 +163,12 @@ server.post('/api/chat', async (request, reply) => {
         originalResponse,
         adjustments: refinement.adjustments,
         customFeedback: refinement.customFeedback
-      } : undefined
+      } : undefined,
+      generationSettings
     );
 
     // 4. Save AI's response message (initially without evaluation)
-    const aiMsg = await addMessage(sessionId, 'ai', aiResponseContent);
+    const aiMsg = await addMessage(sessionId, 'ai', aiResponseContent, userId);
 
     // 5. Check Cache Layer first (prevent duplicate API costs)
     const cacheKey = generateCacheKey(prompt, aiResponseContent);
@@ -174,10 +183,10 @@ server.post('/api/chat', async (request, reply) => {
     }
 
     // 6. Save the evaluation report to the database
-    await addEvaluation(sessionId, aiMsg.id, evaluationReport);
+    await addEvaluation(sessionId, aiMsg.id, evaluationReport, userId);
 
     // 7. Retrieve the updated session to get the message with its evaluation attached
-    const updatedSession = await getSession(sessionId);
+    const updatedSession = await getSession(sessionId, userId);
     const savedAiMsg = updatedSession?.messages.find(m => m.id === aiMsg.id);
 
     return {

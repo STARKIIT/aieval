@@ -80,6 +80,12 @@ export const BiasReportSchema = z.object({
   bias: z.array(BiasSchema)
 });
 
+export const LowLogprobSchema = z.object({
+  claim: z.string(),
+  logprob: z.number(),
+  reason: z.string()
+});
+
 // Main Aggregated Evaluation Report Structure
 export const FullEvaluationReportSchema = z.object({
   overallReliability: z.enum(['LOW', 'MEDIUM', 'HIGH']),
@@ -100,7 +106,8 @@ export const FullEvaluationReportSchema = z.object({
   hallucinations: z.array(HallucinationSchema),
   logicFlaws: z.array(LogicFlawSchema),
   calibration: z.array(CalibrationSchema),
-  bias: z.array(BiasSchema)
+  bias: z.array(BiasSchema),
+  lowLogprobs: z.array(LowLogprobSchema).default([])
 });
 
 export type EvaluationReport = z.infer<typeof FullEvaluationReportSchema>;
@@ -185,7 +192,7 @@ export async function runEvaluationPipeline(
   const auditorPrompt = `
 You are an expert AI Output Judge and Reliability Auditor.
 Analyze the following AI-generated response in relation to the original user prompt.
-You must perform six checks and return a unified JSON report.
+You must perform seven checks and return a unified JSON report.
 
 Input Details:
 ---
@@ -212,6 +219,7 @@ Instructions:
 6. REASONING & LOGIC: Look for causal leaps, circular arguments, or contradictions. Grade severity ('LOW', 'MEDIUM', 'HIGH') and calculate a logic score (0-100). If a logic flaw maps directly to an exact sentence in the 'Segmented Claims to Verify', list that exact sentence in the 'claim' field of the logicFlaw object.
 7. CALIBRATION: Identify sentences making highly confident claims (e.g. 90-100% certainty or phrases like "absolutely will", "definitely") where evidence is weak. Rate certainty (0-100) and status ('CALIBRATED', 'OVERCONFIDENT', 'UNDERCONFIDENT').
 8. BIAS: Check for framing bias or loaded language.
+9. LOW LOG PROBABILITIES: Identify specific sentences/phrases that likely have low predictive certainty / high generation entropy (e.g., specific statistical figures, numbers, dates, names, or speculative nouns where the model had to choose from many likely combinations). For each, estimate a log probability value (a negative float, typically between -0.5 and -5.0, where values below -1.2 represent high token uncertainty) and write a short reason explaining the high choice entropy.
 
 Format Output:
 Return a JSON object conforming exactly to this schema:
@@ -241,6 +249,9 @@ Return a JSON object conforming exactly to this schema:
   ],
   "bias": [
     { "type": "framing"|"cultural"|"other", "evidence": "string", "severity": "LOW"|"MEDIUM"|"HIGH" }
+  ],
+  "lowLogprobs": [
+    { "claim": "exact sentence or phrase text", "logprob": number, "reason": "string explaining the high token entropy/uncertainty" }
   ]
 }
 `;
@@ -352,6 +363,18 @@ function getMockReport(responseContent: string, segments: TextSegment[]): Evalua
         status: 'OVERCONFIDENT'
       }
     ],
-    bias: []
+    bias: [],
+    lowLogprobs: [
+      {
+        claim: match1Claim || 'Our primary competitor, ShipCo, reported a 45% delivery failure rate.',
+        logprob: -2.3,
+        reason: 'Specific statistical percentage choice has low predictive log probability (high choice entropy).'
+      },
+      {
+        claim: match2Claim || 'Also, active customer base of 12.5 million.',
+        logprob: -1.8,
+        reason: 'The choice of "12.5 million" has low predictive certainty due to multiple competitive candidates for the numerical token.'
+      }
+    ]
   };
 }

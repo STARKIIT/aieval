@@ -98,7 +98,7 @@ export const Highlighting: React.FC<HighlightingProps> = ({ content, evaluation 
   // Compile active highlight targets
   const highlightsList: {
     text: string;
-    type: 'hallucination' | 'logic' | 'assumption' | 'calibration';
+    type: 'hallucination' | 'logic' | 'assumption' | 'calibration' | 'logprob';
     reason: string;
     title: string;
     tab: string;
@@ -175,6 +175,22 @@ export const Highlighting: React.FC<HighlightingProps> = ({ content, evaluation 
         }
       });
     }
+
+    // 5. Low Logprobs (High entropy highlights)
+    if (evaluation.lowLogprobs) {
+      evaluation.lowLogprobs.forEach(lp => {
+        const certaintyPercent = Math.round(Math.exp(lp.logprob) * 100);
+        highlightsList.push({
+          text: lp.claim,
+          type: 'logprob',
+          reason: `${lp.reason} Logprob: ${lp.logprob}.`,
+          title: `📉 Low Log Probability (Certainty: ${certaintyPercent}%)`,
+          tab: 'logprobs',
+          styleClass: 'border-violet-500/60 bg-violet-500/8 hover:bg-violet-500/15 text-violet-200',
+          tooltipAccent: 'text-violet-400'
+        });
+      });
+    }
   }
 
   // Fallback if no evaluation or highlights
@@ -186,7 +202,7 @@ export const Highlighting: React.FC<HighlightingProps> = ({ content, evaluation 
     );
   }
 
-  // Deduplicate and prioritize: Hallucination > Logic > Assumption > Calibration
+  // Deduplicate and prioritize: Hallucination > Logic > Assumption > Logprob > Calibration
   const activeHighlightsMap = new Map<string, typeof highlightsList[0]>();
   highlightsList.forEach(hl => {
     const existing = activeHighlightsMap.get(hl.text);
@@ -195,9 +211,11 @@ export const Highlighting: React.FC<HighlightingProps> = ({ content, evaluation 
     } else {
       if (hl.type === 'hallucination') {
         activeHighlightsMap.set(hl.text, hl);
-      } else if (hl.type === 'logic' && (existing.type === 'assumption' || existing.type === 'calibration')) {
+      } else if (hl.type === 'logic' && (existing.type === 'assumption' || existing.type === 'logprob' || existing.type === 'calibration')) {
         activeHighlightsMap.set(hl.text, hl);
-      } else if (hl.type === 'assumption' && existing.type === 'calibration') {
+      } else if (hl.type === 'assumption' && (existing.type === 'logprob' || existing.type === 'calibration')) {
+        activeHighlightsMap.set(hl.text, hl);
+      } else if (hl.type === 'logprob' && existing.type === 'calibration') {
         activeHighlightsMap.set(hl.text, hl);
       }
     }

@@ -5,7 +5,9 @@ import {
   createSession, 
   getSession, 
   clearSession,
-  addEvaluation
+  addEvaluation,
+  listSessions,
+  toUUID
 } from '../database/db.js';
 import { runEvaluationPipeline, FullEvaluationReportSchema } from '../engines/evaluators.js';
 import { generateResponse } from '../engines/modelRouter.js';
@@ -55,6 +57,12 @@ describe('Phase 5: Evaluation Pipeline & Server Integration', () => {
       expect(parsed.data.trustScore).toBeLessThanOrEqual(100);
       expect(parsed.data.logicScore).toBe(85);
       expect(parsed.data.assumptions[0].statement).toContain('onboarding of external partners');
+      
+      // Verify lowLogprobs structure
+      expect(parsed.data.lowLogprobs).toBeDefined();
+      expect(parsed.data.lowLogprobs!.length).toBeGreaterThan(0);
+      expect(parsed.data.lowLogprobs![0].logprob).toBeLessThan(0);
+      expect(parsed.data.lowLogprobs![0].reason).toBeDefined();
     }
   });
 
@@ -77,5 +85,26 @@ describe('Phase 5: Evaluation Pipeline & Server Integration', () => {
     expect(body.aiMessage.evaluation).toBeDefined();
     expect(body.aiMessage.evaluation.overallReliability).toBe('MEDIUM');
     expect(body.aiMessage.evaluation.hallucinations).toHaveLength(2);
+  });
+
+  it('should isolate sessions and restrict list metadata based on user ID contexts', async () => {
+    const userA = 'user-a-uuid';
+    const userB = 'user-b-uuid';
+    const sessionAId = 'session-a-id';
+    
+    // Create session under userA
+    const sessionA = await createSession(sessionAId, userA);
+    expect(sessionA).toBeDefined();
+
+    // Query sessions list as User A (should contain the session)
+    const sessionsListA = await listSessions(userA);
+    expect(sessionsListA).toContain(toUUID(sessionAId));
+
+    // Query sessions list as User B (should NOT contain the session)
+    const sessionsListB = await listSessions(userB);
+    expect(sessionsListB).not.toContain(toUUID(sessionAId));
+
+    // Clean up
+    await clearSession(sessionAId, userA);
   });
 });

@@ -73,3 +73,18 @@
 - Repackaged composer input bar into a fully-rounded input capsule.
 - Updated Right Evaluation Sidebar to match the color palette, Material tabs, and radial gauge meters.
 - Verified frontend compilation and test suites with 100% test passage.
+
+[2026-06-04T21:40:00Z] PHASE 10 COMPLETED
+- Installed `@supabase/supabase-js` dependencies in frontend and backend.
+- Configured connection environment variables inside `.env` files.
+- Built a dark-mode Material login gate in `page.tsx` with Google Sign-in and Anonymous Guest mode.
+- Modified Zustand store to track active logged-in user state.
+- Updated all API fetches to transmit active `x-user-id` headers to the server.
+- Refactored `db.ts` to log sessions and messages securely to Supabase tables.
+
+[2026-06-04T22:07:00Z] PHASE 11 COMPLETED
+- Configured the backend with `SUPABASE_SERVICE_ROLE_KEY` to bypass client-level RLS policies, securely delegating multi-user queries inside backend database calls.
+- Cleared out legacy pre-auth `.json` session data from `backend/data/sessions/` for a clean deployment.
+- Wrote and executed integration tests verifying multi-user context isolation in `phase5.test.ts`.
+- Successfully compiled production builds for both frontend (`npm run build`) and backend (`tsc`) with zero errors.
+- Verified that all 24 project unit/integration tests (5 frontend, 19 backend) pass successfully.

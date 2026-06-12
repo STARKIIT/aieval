@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useStore, Message } from '@/store/useStore';
 import { Highlighting } from '@/components/Highlighting';
 import { Sidebar } from '@/components/Sidebar';
+import { supabase } from '@/lib/supabaseClient';
 import { 
   Send, 
   Sparkles, 
@@ -22,7 +23,8 @@ import {
   X,
   ChevronDown,
   Search,
-  ArrowUp
+  ArrowUp,
+  SlidersHorizontal
 } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:3001/api';
@@ -71,7 +73,9 @@ export default function WorkspacePage() {
     setGenerating,
     isEvaluating,
     setEvaluating,
-    clearWorkspace
+    clearWorkspace,
+    user,
+    setUser
   } = useStore();
 
   const [prompt, setPrompt] = useState('');
@@ -79,6 +83,14 @@ export default function WorkspacePage() {
   const [isLeftSidebarExpanded, setIsLeftSidebarExpanded] = useState(true);
   const [sessionsList, setSessionsList] = useState<{ id: string; title: string; updatedAt: string }[]>([]);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
+  
+  // Custom generation settings state
+  const [genSettings, setGenSettings] = useState<{ tone: 'empathetic' | 'neutral' | 'raw'; multiplePaths: boolean }>({
+    tone: 'neutral',
+    multiplePaths: false
+  });
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const settingsPopoverRef = useRef<HTMLDivElement>(null);
   
   // Interactive Refinement state hooks
   const [openRefinementMsgId, setOpenRefinementMsgId] = useState<string | null>(null);
@@ -143,23 +155,55 @@ export default function WorkspacePage() {
     return list;
   };
 
-  // Initialize session and fetch session history
+  // Listen to Supabase Auth State Changes
   useEffect(() => {
-    let activeSessionId = sessionId;
-    if (!activeSessionId) {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setUser(session.user);
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        setUser(session.user);
+      } else {
+        setUser(null);
+        clearWorkspace();
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  // Fetch session history when sessionId or user changes
+  useEffect(() => {
+    if (user && sessionId) {
+      fetchSessionHistory(sessionId);
+    }
+  }, [sessionId, user]);
+
+  // Initial load of sessions list when user logs in
+  useEffect(() => {
+    if (user) {
+      loadSessionsList();
+    }
+  }, [user]);
+
+  // Initialize session ID if not present
+  useEffect(() => {
+    if (!sessionId) {
       const storedSession = localStorage.getItem('trustlayer_session_id');
       if (storedSession) {
-        activeSessionId = storedSession;
+        setSessionId(storedSession);
       } else {
-        activeSessionId = 'session_' + Math.random().toString(36).substring(2, 11);
-        localStorage.setItem('trustlayer_session_id', activeSessionId);
+        const newId = 'session_' + Math.random().toString(36).substring(2, 11);
+        localStorage.setItem('trustlayer_session_id', newId);
+        setSessionId(newId);
       }
-      setSessionId(activeSessionId);
     }
-    
-    fetchSessionHistory(activeSessionId);
-    loadSessionsList();
-  }, []);
+  }, [sessionId]);
 
   // Scroll to bottom on message list update
   useEffect(() => {
@@ -172,6 +216,9 @@ export default function WorkspacePage() {
     function handleClickOutside(event: MouseEvent) {
       if (modelDropdownRef.current && !modelDropdownRef.current.contains(event.target as Node)) {
         setIsModelDropdownOpen(false);
+      }
+      if (settingsPopoverRef.current && !settingsPopoverRef.current.contains(event.target as Node)) {
+        setIsSettingsOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -188,11 +235,20 @@ export default function WorkspacePage() {
     }
   }, [prompt]);
 
+  // Collapse left sidebar on mobile screen initial load
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setIsLeftSidebarExpanded(false);
+    }
+  }, []);
+
   // Fetch history from Fastify API
   const fetchSessionHistory = async (id: string) => {
     try {
       setErrorMsg(null);
-      const res = await fetch(`${API_BASE}/session/${id}`);
+      const res = await fetch(`${API_BASE}/session/${id}`, {
+        headers: user ? { 'x-user-id': user.id } : {}
+      });
       if (!res.ok) throw new Error('Failed to retrieve session history');
       
       const data = await res.json() as { messages: Message[] };
@@ -214,7 +270,9 @@ export default function WorkspacePage() {
   // Load sessions metadata list
   const loadSessionsList = async () => {
     try {
-      const res = await fetch(`${API_BASE}/sessions`);
+      const res = await fetch(`${API_BASE}/sessions`, {
+        headers: user ? { 'x-user-id': user.id } : {}
+      });
       if (res.ok) {
         const data = await res.json();
         setSessionsList(data);
@@ -236,7 +294,10 @@ export default function WorkspacePage() {
     try {
       const res = await fetch(`${API_BASE}/session/clear`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(user ? { 'x-user-id': user.id } : {})
+        },
         body: JSON.stringify({ sessionId: id })
       });
       if (res.ok) {
@@ -270,7 +331,10 @@ export default function WorkspacePage() {
     try {
       const res = await fetch(`${API_BASE}/session/clear`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(user ? { 'x-user-id': user.id } : {})
+        },
         body: JSON.stringify({ sessionId })
       });
       if (res.ok) {
@@ -333,12 +397,16 @@ export default function WorkspacePage() {
     try {
       const res = await fetch(`${API_BASE}/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(user ? { 'x-user-id': user.id } : {})
+        },
         body: JSON.stringify({
           sessionId,
           model: selectedModel,
           prompt: activePrompt, // Original base prompt
-          refinement
+          refinement,
+          generationSettings: genSettings
         })
       });
 
@@ -377,13 +445,106 @@ export default function WorkspacePage() {
   const activeMessage = messages.find(m => m.id === activeMessageId);
   const selectedModelLabel = selectedModel === 'gemini' ? 'Gemini 2.5 Flash' : 'Llama 3.3 (Groq)';
 
+  if (!user) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-[#131314] text-[#e3e3e3] font-sans overflow-hidden relative">
+        {/* Gemini ambient glows */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden select-none">
+          <div 
+            className="absolute w-[500px] h-[500px] rounded-full animate-glow-1"
+            style={{
+              background: 'radial-gradient(circle, rgba(66, 133, 244, 0.15) 0%, rgba(66, 133, 244, 0) 70%)',
+              left: 'calc(50% - 250px)',
+              top: 'calc(45% - 250px)',
+              filter: 'blur(90px)',
+            }}
+          />
+        </div>
+
+        <div className="relative z-10 w-full max-w-[420px] p-8 rounded-3xl glass-surface border border-[#2c2e30]/80 shadow-2xl space-y-8 text-center animate-fadeIn">
+          {/* Brand Logo & Name */}
+          <div className="space-y-3">
+            <div className="mx-auto h-12 w-12 rounded-2xl bg-gradient-to-br from-[#4b90ff] via-[#8ab4f8] to-[#9106ff] flex items-center justify-center shadow-lg shadow-[#4b90ff]/10">
+              <Sparkles className="h-6 w-6 text-white" />
+            </div>
+            <h1 className="text-[24px] font-semibold text-white tracking-tight">TrustLayer AI</h1>
+            <p className="text-[13px] text-[#9aa0a6] leading-relaxed max-w-[320px] mx-auto">
+              AI Output Trust & Reliability Platform. Evaluate logic, hallucinations, calibration, and bias.
+            </p>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="space-y-3">
+            <button
+              onClick={async () => {
+                setErrorMsg(null);
+                const { error } = await supabase.auth.signInWithOAuth({
+                  provider: 'google',
+                  options: {
+                    redirectTo: typeof window !== 'undefined' ? `${window.location.origin}` : undefined
+                  }
+                });
+                if (error) {
+                  setErrorMsg(error.message);
+                }
+              }}
+              className="w-full flex items-center justify-center gap-3 px-5 py-3.5 bg-white hover:bg-white/95 text-[#131314] rounded-full text-[14px] font-semibold transition-all duration-200 shadow-sm cursor-pointer"
+            >
+              {/* Google icon representation */}
+              <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+              </svg>
+              Sign In with Google
+            </button>
+
+            <button
+              onClick={async () => {
+                setErrorMsg(null);
+                const { error } = await supabase.auth.signInAnonymously();
+                if (error) {
+                  setErrorMsg(error.message);
+                }
+              }}
+              className="w-full flex items-center justify-center gap-2.5 px-5 py-3.5 bg-[#1e1f20]/80 hover:bg-[#2d2f31] border border-[#2c2e30] rounded-full text-[14px] font-semibold text-white transition-all duration-200 cursor-pointer"
+            >
+              Continue as Guest
+            </button>
+          </div>
+
+          {errorMsg && (
+            <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-xl text-[12px] font-medium leading-relaxed animate-pulse text-left">
+              {errorMsg}
+            </div>
+          )}
+
+          <div className="text-[11px] text-[#9aa0a6]/60 leading-normal max-w-[280px] mx-auto font-normal">
+            Guest sessions are saved temporarily in local storage and linked to your current browser.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-screen w-screen flex bg-[#131314] text-[#e3e3e3] font-sans overflow-hidden">
       
+      {/* Left Sidebar Drawer Overlay for Mobile */}
+      {isLeftSidebarExpanded && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-30 md:hidden animate-fadeIn"
+          onClick={() => setIsLeftSidebarExpanded(false)}
+        />
+      )}
+
       {/* ═══ 1. LEFT COLLAPSIBLE NAVIGATION DRAWER ═══ */}
       <aside 
-        className={`h-full flex flex-col justify-between shrink-0 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] relative z-30 ${
-          isLeftSidebarExpanded ? 'w-[264px]' : 'w-[68px]'
+        className={`h-full flex flex-col justify-between shrink-0 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] z-40 fixed md:relative inset-y-0 left-0 ${
+          isLeftSidebarExpanded 
+            ? 'w-[264px] translate-x-0' 
+            : 'w-[264px] -translate-x-full md:w-[68px] md:translate-x-0'
         }`}
         style={{ background: '#1e1f20' }}
       >
@@ -506,15 +667,40 @@ export default function WorkspacePage() {
           </button>
 
           {/* Profile Bubble */}
-          <div className="flex items-center gap-3 px-2 py-2.5 mt-1">
-            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-[#8ab4f8]/30 to-[#4b90ff]/20 border border-[#8ab4f8]/25 text-[#8ab4f8] flex items-center justify-center font-semibold text-[11px] shrink-0 select-none">
-              BL
+          <div className="flex items-center justify-between mt-1">
+            <div className="flex items-center gap-3 px-2 py-2.5 truncate">
+              {user?.user_metadata?.avatar_url ? (
+                <img 
+                  src={user.user_metadata.avatar_url} 
+                  alt="User Avatar"
+                  className="h-8 w-8 rounded-full shrink-0 object-cover border border-[#8ab4f8]/20"
+                />
+              ) : (
+                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-[#8ab4f8]/30 to-[#4b90ff]/20 border border-[#8ab4f8]/25 text-[#8ab4f8] flex items-center justify-center font-semibold text-[11px] shrink-0 select-none">
+                  {user?.email ? user.email.substring(0, 2).toUpperCase() : 'GU'}
+                </div>
+              )}
+              {isLeftSidebarExpanded && (
+                <div className="flex flex-col leading-tight animate-fadeIn truncate">
+                  <span className="text-[13px] font-medium text-white/90 truncate">
+                    {user?.user_metadata?.full_name || 'Guest User'}
+                  </span>
+                  <span className="text-[11px] text-[#9aa0a6] truncate">
+                    {user?.email || 'Guest Session'}
+                  </span>
+                </div>
+              )}
             </div>
             {isLeftSidebarExpanded && (
-              <div className="flex flex-col leading-tight animate-fadeIn truncate">
-                <span className="text-[13px] font-medium text-white/90">Boragala Likhit</span>
-                <span className="text-[11px] text-[#9aa0a6] truncate">Auditor Account</span>
-              </div>
+              <button
+                onClick={async () => {
+                  await supabase.auth.signOut();
+                }}
+                className="text-[11px] text-rose-400 hover:text-rose-300 font-semibold px-2 py-1.5 rounded hover:bg-rose-500/10 transition mr-1 cursor-pointer shrink-0"
+                title="Sign Out"
+              >
+                Exit
+              </button>
             )}
           </div>
 
@@ -685,12 +871,12 @@ export default function WorkspacePage() {
           {messages.length === 0 ? (
             
             /* ─── GREETING SCREEN & STARTER CARDS ─── */
-            <div className="h-full max-w-[640px] mx-auto flex flex-col items-center justify-center py-8 space-y-10 animate-fadeIn relative z-10">
+            <div className="min-h-full max-w-[640px] mx-auto flex flex-col items-center justify-start md:justify-center py-4 md:py-8 space-y-6 md:space-y-10 animate-fadeIn relative z-10">
               
               {/* Gradient Greeting */}
               <div className="text-center space-y-4">
                 <h1 
-                  className="text-[42px] md:text-[52px] font-medium tracking-[-0.025em] leading-[1.05] py-1 select-none"
+                  className="text-[32px] md:text-[52px] font-medium tracking-[-0.025em] leading-[1.05] py-1 select-none"
                   style={{
                     background: 'linear-gradient(135deg, #4b90ff 0%, #ff5546 45%, #d946ef 70%, #9106ff 100%)',
                     WebkitBackgroundClip: 'text',
@@ -973,6 +1159,91 @@ export default function WorkspacePage() {
                 <Plus className="h-5 w-5" />
               </button>
 
+              {/* Generation Settings Trigger */}
+              <div className="relative flex items-center" ref={settingsPopoverRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+                  className={`p-1.5 hover:bg-[#2d2f31] rounded-full mb-0.5 shrink-0 transition-all duration-150 cursor-pointer ${
+                    isSettingsOpen ? 'text-[#8ab4f8] bg-[#8ab4f8]/10' : 'text-[#9aa0a6] hover:text-[#e3e3e3]'
+                  }`}
+                  title="Configure Tone & Paths Settings"
+                >
+                  <SlidersHorizontal className="h-5 w-5" />
+                </button>
+
+                {/* Floating custom generation settings popover */}
+                {isSettingsOpen && (
+                  <div className="absolute bottom-full left-0 mb-3.5 w-[280px] glass-surface border border-[#36383a] rounded-2xl shadow-2xl z-50 p-4 animate-fadeIn space-y-4 text-left select-none">
+                    <div className="flex items-center justify-between border-b border-[#2c2e30]/40 pb-2">
+                      <h4 className="text-[13px] font-semibold text-white flex items-center gap-1.5">
+                        <SlidersHorizontal className="h-3.5 w-3.5 text-[#8ab4f8]" />
+                        Generation Controls
+                      </h4>
+                      <button 
+                        type="button"
+                        onClick={() => setIsSettingsOpen(false)}
+                        className="text-[#9aa0a6] hover:text-white cursor-pointer"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Tone Selector */}
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-[#9aa0a6] uppercase tracking-wider block">
+                        Confidence Tone
+                      </label>
+                      <div className="grid grid-cols-3 gap-1 bg-[#131314]/50 border border-[#2c2e30]/60 p-1 rounded-lg">
+                        {[
+                          { value: 'empathetic', label: 'Empathetic' },
+                          { value: 'neutral', label: 'Balanced' },
+                          { value: 'raw', label: 'Blatant' }
+                        ].map((t) => (
+                          <button
+                            key={t.value}
+                            type="button"
+                            onClick={() => setGenSettings(prev => ({ ...prev, tone: t.value as any }))}
+                            className={`px-2 py-1.5 rounded text-[11px] font-medium transition duration-150 text-center cursor-pointer ${
+                              genSettings.tone === t.value
+                                ? 'bg-[#8ab4f8]/10 text-[#8ab4f8] font-semibold'
+                                : 'text-[#9aa0a6] hover:text-white'
+                            }`}
+                          >
+                            {t.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Checkbox Options */}
+                    <div className="space-y-2.5 pt-1">
+                      <label className="text-[11px] font-bold text-[#9aa0a6] uppercase tracking-wider block">
+                        Reasoning Strategy
+                      </label>
+                      <label className="flex items-start gap-2.5 cursor-pointer p-2 hover:bg-[#2d2f31]/40 rounded-xl transition duration-150 border border-[#2c2e30]/20">
+                        <input
+                          type="checkbox"
+                          checked={genSettings.multiplePaths}
+                          onChange={(e) => setGenSettings(prev => ({ ...prev, multiplePaths: e.target.checked }))}
+                          className="mt-0.5 rounded border-[#2c2e30]/60 bg-[#1e1f20] text-[#8ab4f8] focus:ring-0 focus:ring-offset-0 h-4 w-4"
+                        />
+                        <div className="leading-tight">
+                          <span className="text-[12px] font-medium text-[#e3e3e3] block">Consider multiple paths</span>
+                          <span className="text-[10px] text-[#9aa0a6] opacity-80 block mt-0.5">Explore alternate ways and branches when generating responses.</span>
+                        </div>
+                      </label>
+                    </div>
+
+                    {/* Active indicators indicator */}
+                    <div className="flex items-center gap-1.5 pt-1 text-[10px] text-[#8ab4f8] font-semibold">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#8ab4f8] animate-pulse" />
+                      Settings will apply to the next message.
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Textarea */}
               <textarea
                 ref={textareaRef}
@@ -1016,6 +1287,14 @@ export default function WorkspacePage() {
         </div>
 
       </main>
+
+      {/* Right Sidebar Drawer Overlay for Mobile/Tablet */}
+      {isSidebarOpen && activeMessage?.evaluation && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-30 md:hidden animate-fadeIn"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
       {/* ═══ 3. RIGHT EVALUATION SIDEBAR ═══ */}
       {isSidebarOpen && activeMessage?.evaluation && (

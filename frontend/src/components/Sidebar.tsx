@@ -1,6 +1,6 @@
 import React from 'react';
 import { useStore, EvaluationReport } from '@/store/useStore';
-import { X, ShieldAlert, CheckCircle, AlertTriangle, ShieldCheck, HelpCircle, Activity, Scale, Compass, Brain, ArrowLeft, ChevronRight } from 'lucide-react';
+import { X, ShieldAlert, CheckCircle, AlertTriangle, ShieldCheck, HelpCircle, Activity, Scale, Compass, Brain, ArrowLeft, ChevronRight, Percent } from 'lucide-react';
 
 interface SidebarProps {
   evaluation: EvaluationReport;
@@ -58,13 +58,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ evaluation, onClose }) => {
     logic: { label: 'Reasoning & Logic', icon: Activity, color: 'text-[#8ab4f8]' },
     calibration: { label: 'Calibration Analysis', icon: Compass, color: 'text-[#8ab4f8]' },
     bias: { label: 'Bias & Fairness', icon: Scale, color: 'text-[#d7aef8]' },
+    logprobs: { label: 'Token Certainty (Logprobs)', icon: Percent, color: 'text-violet-400' },
   };
 
   const isSubView = activeTab !== 'overview';
   const currentSubView = subViewLabels[activeTab];
 
   return (
-    <div className="h-full flex flex-col text-[#e3e3e3] w-full md:w-[420px] lg:w-[460px] shadow-2xl relative z-40 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] border-l border-[#2c2e30]/50"
+    <div className="h-full flex flex-col text-[#e3e3e3] fixed md:relative inset-y-0 right-0 z-40 w-full sm:w-[400px] md:w-[420px] lg:w-[460px] shadow-2xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] border-l border-[#2c2e30]/50"
       style={{ background: '#1e1f20' }}
     >
       
@@ -204,6 +205,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ evaluation, onClose }) => {
                   { tab: 'logic', label: 'Reasoning & Logic Flaws', icon: Activity, color: 'text-[#8ab4f8]', iconBg: 'bg-[#8ab4f8]/10', badge: String(evaluation.logicFlaws.length), badgeStyle: evaluation.logicFlaws.length > 0 ? 'bg-amber-500/10 text-amber-400' : 'bg-[#131314]/40 text-[#9aa0a6]' },
                   { tab: 'calibration', label: 'Certainty Calibration', icon: Compass, color: 'text-[#8ab4f8]', iconBg: 'bg-[#8ab4f8]/10', badge: String(evaluation.calibration.length), badgeStyle: 'bg-[#131314]/40 text-[#9aa0a6]' },
                   { tab: 'bias', label: 'Bias & Fairness', icon: Scale, color: 'text-[#d7aef8]', iconBg: 'bg-[#d7aef8]/10', badge: String(evaluation.bias.length), badgeStyle: evaluation.bias.length > 0 ? 'bg-[#d7aef8]/10 text-[#d7aef8]' : 'bg-[#131314]/40 text-[#9aa0a6]' },
+                  { tab: 'logprobs', label: 'Token Certainty (Logprobs)', icon: Percent, color: 'text-violet-400', iconBg: 'bg-violet-500/10', badge: String(evaluation.lowLogprobs?.length || 0), badgeStyle: (evaluation.lowLogprobs?.length || 0) > 0 ? 'bg-violet-500/10 text-violet-400' : 'bg-[#131314]/40 text-[#9aa0a6]' },
                 ].map((item) => {
                   const Icon = item.icon;
                   return (
@@ -429,6 +431,49 @@ export const Sidebar: React.FC<SidebarProps> = ({ evaluation, onClose }) => {
                   </p>
                 </div>
               ))
+            )}
+          </div>
+        )}
+
+        {/* ═══ LOGPROBS SUB-VIEW ═══ */}
+        {activeTab === 'logprobs' && (
+          <div className="space-y-4 animate-fadeIn">
+            <p className="text-[12px] text-[#9aa0a6] leading-relaxed">
+              Highlights parts of the response generated with low predictive certainty (low log probability). These indicate where the model had to make a guess or choose among multiple highly likely options.
+            </p>
+            {!evaluation.lowLogprobs || evaluation.lowLogprobs.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-8 bg-[#131314]/15 border border-dashed border-[#2c2e30]/40 rounded-xl">
+                <CheckCircle className="h-8 w-8 text-emerald-400 mb-2" />
+                <p className="text-[12px] text-[#9aa0a6] font-medium">All tokens generated with high certainty</p>
+              </div>
+            ) : (
+              evaluation.lowLogprobs.map((item, index) => {
+                const certaintyPercent = Math.round(Math.exp(item.logprob) * 100);
+                return (
+                  <div key={index} className="p-4 bg-[#131314]/20 border border-[#2c2e30]/40 rounded-xl space-y-3 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 bottom-0 w-[3px] bg-violet-500 rounded-r" />
+                    <div className="flex items-center justify-between pl-2">
+                      <span className="text-[10px] font-bold tracking-wider font-mono uppercase bg-violet-500/10 text-violet-400 px-2.5 py-0.5 rounded-full">
+                        Certainty: {certaintyPercent}%
+                      </span>
+                      <span className="text-[10px] text-[#9aa0a6]/50 font-mono">Logprob: {item.logprob.toFixed(2)}</span>
+                    </div>
+                    <div className="pl-2 space-y-2">
+                      <div className="w-full bg-[#131314] h-1.5 rounded-full overflow-hidden">
+                        <div 
+                          className="bg-violet-500 h-full rounded-full transition-all duration-500" 
+                          style={{ width: `${certaintyPercent}%` }}
+                        />
+                      </div>
+                      <p className="text-[12px] text-violet-200/80 italic leading-relaxed bg-violet-950/10 border border-violet-500/10 rounded-lg p-3">
+                        &quot;{item.claim}&quot;
+                      </p>
+                      <p className="text-[10px] font-bold text-[#9aa0a6] uppercase tracking-wider pt-1">Predictive Analysis</p>
+                      <p className="text-[12px] text-[#c4c7c5] leading-relaxed">{item.reason}</p>
+                    </div>
+                  </div>
+                );
+              })
             )}
           </div>
         )}

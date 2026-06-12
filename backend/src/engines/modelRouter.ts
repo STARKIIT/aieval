@@ -68,6 +68,10 @@ export async function generateResponse(
     originalResponse: string;
     adjustments: { type: string; original: string; modification: string }[];
     customFeedback?: string;
+  },
+  generationSettings?: {
+    tone: 'empathetic' | 'neutral' | 'raw';
+    multiplePaths: boolean;
   }
 ): Promise<string> {
   let finalPrompt = prompt;
@@ -89,6 +93,24 @@ ${adjustmentsText}
 ${refinement.customFeedback ? `\nAdditional Feedback:\n"${refinement.customFeedback}"` : ''}
 
 Generate a revised response addressing the corrections. Output only the revised response content without explanations, JSON, or meta-comments.`;
+  }
+
+  // Apply generation customization settings (Tone & Multiple Paths)
+  if (generationSettings) {
+    const instructions: string[] = [];
+    if (generationSettings.tone === 'empathetic') {
+      instructions.push("Tone Guideline: Adopt a highly empathetic, sensitive, and emotionally supportive tone. Avoid cold, robotic statements; instead, use polite, caring, and encouraging phrasing.");
+    } else if (generationSettings.tone === 'raw') {
+      instructions.push("Tone Guideline: Be extremely direct, unfiltered, and raw/blatant. State the harsh facts, logic errors, or truth blunt and straight to the point without any sugarcoating or introductory fluff.");
+    }
+
+    if (generationSettings.multiplePaths) {
+      instructions.push("Reasoning Guideline: If there are multiple potential solutions, interpretations, or pathways to address this prompt, explore and present them clearly as separate logical branches/paths (e.g., 'Path A: ...', 'Path B: ...') so the user can compare alternative routes.");
+    }
+
+    if (instructions.length > 0) {
+      finalPrompt = `${finalPrompt}\n\n[System Guidelines for Response Generation]\n${instructions.join("\n")}`;
+    }
   }
 
   if (model === 'groq') {
