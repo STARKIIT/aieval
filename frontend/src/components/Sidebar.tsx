@@ -46,7 +46,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ evaluation, onClose }) => {
   const rel = getReliabilityStyles(evaluation.overallReliability);
   const RelIcon = rel.icon;
 
-  const radius = 38;
+  const radius = 32;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (evaluation.trustScore / 100) * circumference;
 
